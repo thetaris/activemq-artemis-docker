@@ -21,7 +21,7 @@ getFullTagNameFromTag=$(call lookupRepositoryFromTag,$1):$(call getVersionFromTa
 build_%:
 	@cd src && \
 	echo Building version $* && \
-	docker build --quiet --build-arg ACTIVEMQ_ARTEMIS_VERSION=$(call getVersionFromTag,$*) --build-arg BASE_IMAGE=$(call lookupBaseImageFromTag,$*) $(BUILD_ARGS) -t $(call getFullTagNameFromTag,$*) -f $(call lookupDockerfileFromTag,$*) .
+	docker buildx build --platform linux/amd64 --progress=plain --build-arg ACTIVEMQ_ARTEMIS_VERSION=$(call getVersionFromTag,$*) --build-arg BASE_IMAGE=$(call lookupBaseImageFromTag,$*) $(BUILD_ARGS) -t $(call getFullTagNameFromTag,$*) -f $(call lookupDockerfileFromTag,$*) .
 
 tag_%:
 	@for alias in $(call lookupÀliasesFromTag,$*); do docker tag $(call getFullTagNameFromTag,$*) $$alias ; done

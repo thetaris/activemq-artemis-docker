@@ -4,13 +4,13 @@
 ## Build Image                                           #
 ##########################################################
 ARG BASE_IMAGE
-FROM openjdk:8u171-jdk-stretch as builder
+FROM openjdk:19-jdk-bullseye as builder
 LABEL maintainer="Victor Romero <victor.romero@gmail.com>"
 
 ARG ACTIVEMQ_ARTEMIS_VERSION
 ARG ACTIVEMQ_DISTRIBUTION_URL
 ENV JMX_EXPORTER_VERSION=0.3.1
-ENV JGROUPS_KUBERNETES_VERSION=0.9.3
+ENV JGROUPS_KUBERNETES_VERSION=2.0.1.Final
 ENV JAVAX_JSON_VERSION=1.1.4
 
 # See https://github.com/hadolint/hadolint/wiki/DL4006
@@ -18,12 +18,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get -qq -o=Dpkg::Use-Pty=0 update && \
   apt-get -qq -o=Dpkg::Use-Pty=0 install -y --no-install-recommends \
-    libaio1=0.3.110-3 \
-    xmlstarlet=1.6.1-2 \
-    jq=1.5+dfsg-1.3 \
-    ca-certificates=20161130+nmu1+deb9u1 \
-    wget=1.18-5+deb9u2 \
-    ivy=2.4.0-3 && \
+    libaio1 \
+    xmlstarlet \
+    jq \
+    ca-certificates \
+    wget \
+    ivy && \
   rm -rf /var/lib/apt/lists/*
 
 # Make sure pipes are considered to detemine success, see: https://github.com/hadolint/hadolint/wiki/DL4006
@@ -46,7 +46,7 @@ RUN if (echo "${ACTIVEMQ_DISTRIBUTION_URL}" | grep -Eq  ".zip\$" ) ; \
     else \
       wget "https://repository.apache.org/content/repositories/releases/org/apache/activemq/apache-artemis/${ACTIVEMQ_ARTEMIS_VERSION}/apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}-bin.tar.gz" && \
       wget "https://repository.apache.org/content/repositories/releases/org/apache/activemq/apache-artemis/${ACTIVEMQ_ARTEMIS_VERSION}/apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}-bin.tar.gz.asc" && \
-      wget "http://apache.org/dist/activemq/KEYS" && \
+      wget --no-check-certificate "https://apache.org/dist/activemq/KEYS" && \
       gpg --no-tty --import "KEYS" && \
       gpg --no-tty "apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}-bin.tar.gz.asc" && \
       tar xfz "apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}-bin.tar.gz" && \
@@ -71,6 +71,7 @@ RUN if test "${ACTIVEMQ_ARTEMIS_VERSION}" = "1.0.0" ; \
         --user artemis \
         --password simetraehcapa \
         --role amq \
+        --nio \
         --require-login \
         --cluster-user artemisCluster \
         --cluster-password simetraehcaparetsulc ; \
@@ -79,8 +80,8 @@ RUN if test "${ACTIVEMQ_ARTEMIS_VERSION}" = "1.0.0" ; \
 # Using KUBE_PING 0.9.3. Can't upgrade to 1.x.x as Artemis uses JGroups 3.3.x 
 # https://github.com/jgroups-extras/jgroups-kubernetes/issues/30
 WORKDIR /opt/jgroupskubernetes
-RUN java -jar /usr/share/java/ivy.jar -dependency org.jgroups.kubernetes kubernetes "${JGROUPS_KUBERNETES_VERSION}" -retrieve "[artifact]-[revision](-[classifier]).[ext]" -types jar && \
-  java -jar /usr/share/java/ivy.jar -dependency org.jgroups.kubernetes dns "${JGROUPS_KUBERNETES_VERSION}" -retrieve "[artifact]-[revision](-[classifier]).[ext]" -types jar
+RUN java -jar /usr/share/java/ivy.jar -dependency org.jgroups.kubernetes jgroups-kubernetes "${JGROUPS_KUBERNETES_VERSION}" -retrieve "[artifact]-[revision](-[classifier]).[ext]" -types jar # &&
+  #java -jar /usr/share/java/ivy.jar -dependency org.jgroups.kubernetes dns "${JGROUPS_KUBERNETES_VERSION}" -retrieve "[artifact]-[revision](-[classifier]).[ext]" -types jar
 
 # JsonFormatter to enable JSON logging #148
 WORKDIR /opt/jsonformatter
@@ -96,7 +97,7 @@ RUN echo "formatter.JSON=org.jboss.logmanager.formatters.JsonFormatter" | tee -a
 RUN sed -i "s/-Xbootclasspath\/a:\"\(.*\)\"/-Xbootclasspath\/a:\"\1:\/opt\/apache-artemis\/lib\/javax.json-1.1.4.jar\"/g" /var/lib/artemis/bin/artemis
 
 # --java-options doesn't seem to work across the board on all versions adding them manually
-RUN sed -i "s/JAVA_ARGS=\"/JAVA_ARGS=\"-Djava.net.preferIPv4Addresses=true -Djava.net.preferIPv4Stack=true -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=2 /g" ../etc/artemis.profile
+RUN sed -i "s/JAVA_ARGS=\"/JAVA_ARGS=\"-Djava.net.preferIPv4Addresses=true -Djava.net.preferIPv4Stack=true -XX:+UnlockExperimentalVMOptions -XX:+UseContainerSupport -XX:MaxRAMFraction=2 /g" ../etc/artemis.profile
 
 # Ports are only exposed with an explicit argument, there is no need to binding
 # the web console to localhost
@@ -140,12 +141,12 @@ RUN groupadd -g 1000 -r artemis && useradd -r -u 1000 -g artemis artemis
 
 RUN apt-get -qq -o=Dpkg::Use-Pty=0 update && \
   apt-get -qq -o=Dpkg::Use-Pty=0 install -y --no-install-recommends \
-    libaio1=0.3.110-3 \
-    xmlstarlet=1.6.1-2 \
-    jq=1.5+dfsg-1.3 \
-    gettext-base=0.19.8.1-2+deb9u1 \
-    dumb-init=1.2.0-1 \
-    procps=2:3.3.12-3+deb9u1 && \
+    libaio1 \
+    xmlstarlet \
+    jq \
+    gettext-base \
+    dumb-init \
+    procps && \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder "/opt/apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}" "/opt/apache-artemis-${ACTIVEMQ_ARTEMIS_VERSION}"
@@ -204,3 +205,6 @@ VOLUME ["/opt/jmx-exporter/etc-override"]
 COPY assets/docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["artemis-server"]
+
+#ENTRYPOINT ["sleep"]
+#CMD ["99999"]
