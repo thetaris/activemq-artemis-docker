@@ -57,7 +57,7 @@ if semver_greater_or_equal_than "${ACTIVEMQ_ARTEMIS_VERSION}" 1.3.0 ; then
 fi
 
 # Update users and roles with if username and password is passed as argument
-if [ "$ARTEMIS_USERNAME" ] && [ "$ARTEMIS_PASSWORD" ]; then
+if [ "$LEGACY_USER_SETUP" ] && [ "$ARTEMIS_USERNAME" ] && [ "$ARTEMIS_PASSWORD" ]; then
 
   # Roles update
 
